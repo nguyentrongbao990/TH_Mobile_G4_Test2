@@ -4,7 +4,6 @@ import android.app.DatePickerDialog;
 import android.app.Dialog;
 import android.app.TimePickerDialog;
 import android.os.Bundle;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -21,7 +20,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -47,22 +45,18 @@ public final class ScheduleEditorDialog extends DialogFragment {
         args.putString("start", schedule == null ? "09:00" : schedule.getStartTime());
         args.putString("end", schedule == null ? "10:00" : schedule.getEndTime());
         args.putString("location", schedule == null ? "" : schedule.getLocation());
-        args.putString("status", schedule == null ? ScheduleValidator.PENDING : schedule.getStatus());
+        args.putString("status", ScheduleValidator.PENDING);
         ScheduleEditorDialog dialog = new ScheduleEditorDialog(); dialog.setArguments(args); return dialog;
     }
 
     @NonNull @Override public Dialog onCreateDialog(Bundle savedInstanceState) {
         Bundle state = savedInstanceState == null ? requireArguments() : savedInstanceState;
-        form = LayoutInflater.from(requireContext()).inflate(R.layout.schedule_editor, null);
+        form = getLayoutInflater().inflate(R.layout.schedule_editor, null);
         subjectIds = requireArguments().getLongArray("subjectIds");
         Spinner subjects = form.findViewById(R.id.schedule_editor_subject);
         subjects.setAdapter(adapter(requireArguments().getStringArrayList("subjectNames")));
         for (int i=0; i<subjectIds.length; i++) if (subjectIds[i] == state.getLong("subjectId")) subjects.setSelection(i);
-        Spinner status = form.findViewById(R.id.schedule_editor_status);
-        List<String> labels = new ArrayList<>();
-        for (String value : ScheduleValidator.STATUSES) labels.add(ScheduleValidator.statusLabel(value) + " (" + value + ")");
-        status.setAdapter(adapter(labels));
-        status.setSelection(Math.max(0, Arrays.asList(ScheduleValidator.STATUSES).indexOf(state.getString("status"))));
+        ((TextView)form.findViewById(R.id.schedule_editor_status)).setText("Chờ Admin xác nhận (Pending)");
         Button date = form.findViewById(R.id.schedule_editor_date);
         date.setText(state.getString("date"));
         date.setOnClickListener(v -> {
@@ -93,15 +87,15 @@ public final class ScheduleEditorDialog extends DialogFragment {
 
     @Override public void onStart() {
         super.onStart();
+        setSaving(new androidx.lifecycle.ViewModelProvider(requireParentFragment())
+                .get(com.example.studyschedule.auth.OperationViewModel.class).isRunning());
         ((AlertDialog)requireDialog()).getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             if (saving) return;
             try {
                 Bundle values = readForm();
                 ScheduleValidator.validate(fromBundle(values));
-                saving = true;
-                ((AlertDialog)requireDialog()).getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);
-                ((AlertDialog)requireDialog()).getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);
-                setCancelable(false);
+                ScheduleValidator.validateFuture(fromBundle(values), java.time.Clock.systemDefaultZone());
+                setSaving(true);
                 getParentFragmentManager().setFragmentResult(REQUEST, values);
             } catch (IllegalArgumentException e) { showError(e.getMessage()); }
         });
@@ -114,7 +108,7 @@ public final class ScheduleEditorDialog extends DialogFragment {
         values.putString("start", ((Button)form.findViewById(R.id.schedule_editor_start)).getText().toString());
         values.putString("end", ((Button)form.findViewById(R.id.schedule_editor_end)).getText().toString());
         values.putString("location", ((EditText)form.findViewById(R.id.schedule_editor_location)).getText().toString().trim());
-        values.putString("status", ScheduleValidator.STATUSES[((Spinner)form.findViewById(R.id.schedule_editor_status)).getSelectedItemPosition()]);
+        values.putString("status", ScheduleValidator.PENDING);
         return values;
     }
     static StudySchedule fromBundle(Bundle b) {
@@ -122,11 +116,17 @@ public final class ScheduleEditorDialog extends DialogFragment {
                 b.getString("date"), b.getString("start"), b.getString("end"), b.getString("location"), b.getString("status"));
     }
     void showError(String message) {
-        saving = false; setCancelable(true);
+        setSaving(false);
         if (form != null) ((TextView)form.findViewById(R.id.schedule_editor_error)).setText(message);
+    }
+    void setSaving(boolean value) {
+        saving = value;
+        setCancelable(!value);
         if (getDialog() instanceof AlertDialog) {
-            ((AlertDialog)getDialog()).getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);
-            ((AlertDialog)getDialog()).getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(true);
+            Button positive = ((AlertDialog)getDialog()).getButton(AlertDialog.BUTTON_POSITIVE);
+            Button negative = ((AlertDialog)getDialog()).getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (positive != null) positive.setEnabled(!value);
+            if (negative != null) negative.setEnabled(!value);
         }
     }
     @Override public void onSaveInstanceState(@NonNull Bundle out) {

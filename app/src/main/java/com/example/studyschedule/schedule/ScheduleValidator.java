@@ -35,6 +35,13 @@ public final class ScheduleValidator {
             throw new IllegalArgumentException("Trạng thái lịch học không hợp lệ.");
     }
 
+    public static void validateFuture(StudySchedule schedule, java.time.Clock clock) {
+        java.time.LocalDateTime start = LocalDate.parse(schedule.getStudyDate())
+                .atTime(LocalTime.parse(schedule.getStartTime()));
+        if (!start.isAfter(java.time.LocalDateTime.now(clock)))
+            throw new IllegalArgumentException("Không thể đặt hoặc dời lịch vào thời điểm đã qua.");
+    }
+
     public static boolean overlaps(String start, String end, String otherStart, String otherEnd) {
         return start.compareTo(otherEnd) < 0 && end.compareTo(otherStart) > 0;
     }

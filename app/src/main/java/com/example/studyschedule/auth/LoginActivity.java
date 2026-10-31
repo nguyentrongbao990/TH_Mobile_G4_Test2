@@ -17,6 +17,8 @@ public class LoginActivity extends ModuleActivity {
     private TextView error;
     private Button login;
     private boolean busy;
+    private OperationViewModel operation;
+    private static final String LOGIN_REQUIRED = "login_required";
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -32,13 +34,23 @@ public class LoginActivity extends ModuleActivity {
             if (action == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) { signIn(); return true; }
             return false;
         });
-        busy = true;
-        login.setEnabled(false);
-        execute(() -> session.isLoggedIn(), valid -> {
-            busy = false;
-            login.setEnabled(true);
-            if (valid) openHome();
-        }, e -> showError("Cannot open the database. Please try again."));
+        operation = new androidx.lifecycle.ViewModelProvider(this).get(OperationViewModel.class);
+        operation.state().observe(this, result -> {
+            if (result == null) return;
+            busy = result.running;
+            login.setEnabled(!busy);
+            if (busy) return;
+            operation.consume();
+            password.setText("");
+            if (result.error != null) { showError("Không thể truy cập dữ liệu. Vui lòng thử lại."); return; }
+            String message = (String)result.value;
+            if (message.isEmpty()) openHome();
+            else if (!LOGIN_REQUIRED.equals(message)) showError(message);
+        });
+        if (!operation.hasState()) {
+            android.content.Context context = getApplicationContext();
+            operation.submit(() -> new SessionManager(context).isLoggedIn() ? "" : LOGIN_REQUIRED);
+        }
     }
 
     private void signIn() {
@@ -50,19 +62,17 @@ public class LoginActivity extends ModuleActivity {
         busy = true;
         login.setEnabled(false);
         error.setText("");
-        execute(() -> {
-            try (DatabaseHelper db = new DatabaseHelper(getApplicationContext())) {
+        android.content.Context context = getApplicationContext();
+        operation.submit(() -> {
+            try (DatabaseHelper db = new DatabaseHelper(context)) {
                 Account account = db.authenticate(user, pass);
                 if (account == null) return "Invalid username or password.";
                 if (!("Admin".equals(account.getRole()) || "Student".equals(account.getRole())))
                     return "This account has an unsupported role.";
-                if (!session.saveSession(account)) return "Account could not be linked or session could not be saved.";
+                if (!new SessionManager(context).saveSession(account)) return "Account could not be linked or session could not be saved.";
                 return "";
             }
-        }, message -> {
-            password.setText("");
-            if (message.isEmpty()) openHome(); else showError(message);
-        }, e -> showError("Unable to sign in. Please try again."));
+        });
     }
 
     private void showError(String message) {

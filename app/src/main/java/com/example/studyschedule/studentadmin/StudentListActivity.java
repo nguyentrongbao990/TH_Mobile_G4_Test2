@@ -22,6 +22,7 @@ public class StudentListActivity extends AdminActivity {
     private ListView list;
     private List<Student> students = new ArrayList<>();
     private int request;
+    private com.example.studyschedule.auth.OperationViewModel writes;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -32,7 +33,25 @@ public class StudentListActivity extends AdminActivity {
         message = findViewById(R.id.studentadmin_message);
         list = findViewById(R.id.studentadmin_list);
         findViewById(R.id.studentadmin_add).setOnClickListener(v -> {
-            if (session.requireAdmin(this)) startActivity(new Intent(this, StudentFormActivity.class));
+            if (checkAdmin()) startActivity(new Intent(this, StudentFormActivity.class));
+        });
+        findViewById(R.id.studentadmin_subjects).setOnClickListener(v -> {
+            if (checkAdmin()) startActivity(new Intent(this, SubjectListActivity.class));
+        });
+        findViewById(R.id.studentadmin_approvals).setOnClickListener(v -> {
+            if (checkAdmin()) startActivity(new Intent(this, ScheduleApprovalActivity.class));
+        });
+        writes = new androidx.lifecycle.ViewModelProvider(this).get(com.example.studyschedule.auth.OperationViewModel.class);
+        writes.state().observe(this, result -> {
+            if (result == null) return;
+            list.setEnabled(!result.running);
+            if (result.running) return;
+            writes.consume();
+            String text = result.error != null
+                    ? result.error instanceof IllegalStateException ? result.error.getMessage() : "Không hoàn tất được thao tác. Vui lòng thử lại."
+                    : (String)result.value;
+            Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+            refresh();
         });
         findViewById(R.id.studentadmin_back).setOnClickListener(v -> finish());
         findViewById(R.id.studentadmin_logout).setOnClickListener(v -> session.logout(this));
@@ -62,7 +81,7 @@ public class StudentListActivity extends AdminActivity {
                 return keyword.isEmpty() ? db.getAllStudents() : db.searchStudents(keyword);
             }
         }, result -> {
-            if (version != request || !session.requireAdmin(this)) return;
+            if (version != request || !checkAdmin()) return;
             students = result;
             List<String> rows = new ArrayList<>();
             for (Student s : result) rows.add(s.getFullname() + " (" + s.getStudentCode() + ")\n"
@@ -81,7 +100,7 @@ public class StudentListActivity extends AdminActivity {
     private String safe(String s) { return s == null ? "" : s; }
 
     private void showActions(Student student) {
-        if (!session.requireAdmin(this)) return;
+        if (!checkAdmin() || writes.hasState()) return;
         new AlertDialog.Builder(this).setTitle(student.getFullname())
                 .setItems(new String[]{"Edit student", "Delete student"}, (dialog, which) -> {
                     if (which == 0) startActivity(new Intent(this, StudentFormActivity.class)
@@ -94,15 +113,13 @@ public class StudentListActivity extends AdminActivity {
         new AlertDialog.Builder(this).setTitle("Delete student?")
                 .setMessage("Delete " + student.getFullname() + "? Their login account and all study schedules will also be deleted.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Delete", (dialog, which) -> {
-                    execute(() -> {
-                        if (!session.isAdmin()) throw new SecurityException();
-                        try (DatabaseHelper db = new DatabaseHelper(getApplicationContext())) {
-                            return db.deleteStudent(student.getId());
+                    android.content.Context context = getApplicationContext();
+                    writes.submit(() -> {
+                        if (!new com.example.studyschedule.auth.SessionManager(context).isAdmin()) throw new SecurityException();
+                        try (DatabaseHelper db = new DatabaseHelper(context)) {
+                            return db.deleteStudent(student.getId()) ? "Đã xóa sinh viên" : "Sinh viên không còn tồn tại. Hãy tải lại.";
                         }
-                    }, deleted -> {
-                        Toast.makeText(this, deleted ? "Student deleted" : "Student was not deleted. Refresh and try again.", Toast.LENGTH_LONG).show();
-                        refresh();
-                    }, e -> Toast.makeText(this, "Unable to delete student. Please try again.", Toast.LENGTH_LONG).show());
+                    });
                 }).show();
     }
 }

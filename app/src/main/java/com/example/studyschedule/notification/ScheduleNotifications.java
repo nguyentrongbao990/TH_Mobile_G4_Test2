@@ -60,7 +60,7 @@ public final class ScheduleNotifications {
         AlarmManager alarms = context.getSystemService(AlarmManager.class);
         long now = System.currentTimeMillis();
         for (StudySchedule s : schedules) {
-            if (ScheduleValidator.CANCELLED.equals(s.getStatus()) || startsAt(s) <= now) continue;
+            if (!ScheduleValidator.CONFIRMED.equals(s.getStatus()) || startsAt(s) <= now) continue;
             String fingerprint = fingerprint(s);
             if (fingerprint.equals(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                     .getString(deliveryKey(accountId, s.getId()), ""))) continue;
@@ -92,7 +92,10 @@ public final class ScheduleNotifications {
                 .putExtra("accountId", account).putExtra("scheduleId", schedule);
     }
     public static void change(Context context, long id, String message) {
-        show(context, "change:" + id, "Lịch học đã thay đổi", message);
+        change(context, com.example.studyschedule.schedule.StudentSession.accountId(context), id, message);
+    }
+    public static void change(Context context, long accountId, long id, String message) {
+        show(context, accountId, "change:" + id, "Lịch học đã thay đổi", message);
     }
     public static void clearReminder(Context context, long scheduleId) {
         context.getSystemService(NotificationManager.class).cancel("reminder:" + scheduleId, 1);
@@ -103,12 +106,18 @@ public final class ScheduleNotifications {
             manager.cancel(tag, 1);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().remove(DISPLAYED).apply();
     }
-    static void upcoming(Context context, StudySchedule schedule, String subject) {
-        show(context, "reminder:" + schedule.getId(), "Sắp đến giờ học: " + subject,
+    static synchronized boolean upcoming(Context context, long accountId, StudySchedule schedule, String subject) {
+        if (!ScheduleValidator.CONFIRMED.equals(schedule.getStatus())) return false;
+        boolean posted = show(context, accountId, "reminder:" + schedule.getId(), "Sắp đến giờ học: " + subject,
                 schedule.getStartTime() + "–" + schedule.getEndTime() + " · " + schedule.getLocation());
+        if (posted) markDelivered(context, accountId, schedule);
+        return posted;
     }
-    private static synchronized void show(Context context, String tag, String title, String message) {
-        if (!configured(context) || !allowed(context)) return;
+    private static synchronized boolean show(Context context, long accountId, String tag, String title, String message) {
+        // Uses the same lock as StudentSession.clear/establish: logout either removes an
+        // already-posted notification or makes this check reject the stale worker.
+        if (accountId <= 0 || accountId != com.example.studyschedule.schedule.StudentSession.accountId(context)
+                || !configured(context) || !allowed(context)) return false;
         NotificationManager manager = context.getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Lịch học", NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent open = PendingIntent.getActivity(context, 0,
@@ -121,6 +130,7 @@ public final class ScheduleNotifications {
         Set<String> tags = new HashSet<>(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getStringSet(DISPLAYED, new HashSet<>()));
         tags.add(tag);
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putStringSet(DISPLAYED, tags).apply();
+        return true;
     }
     static void markDelivered(Context context, long account, StudySchedule schedule) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()

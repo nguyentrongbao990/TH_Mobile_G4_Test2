@@ -55,7 +55,7 @@ Member 3 remaining integration: requireLogin on MainActivity resume (including o
 Tests: Member1SessionTest uses isolated database/preferences and covers Admin authentication, Student CRUD/session deletion, bridge repair on restore, Student switching, Admin switching, orphan bridge cleanup and logout. It never resets production app storage.
 
 
-## Verification � 31 October 2026
+## Verification — 31 October 2026
 
 `gradlew.bat assembleDebug testDebugUnitTest connectedDebugAndroidTest --no-configuration-cache --console=plain` completed successfully on Pixel_8 emulator (Android 17).
 
@@ -64,3 +64,10 @@ Tests: Member1SessionTest uses isolated database/preferences and covers Admin au
 - Tests use isolated database/preferences. They cover authentication, student profile CRUD, duplicate rollback, session persistence/deletion, Student bridge restore/switch/logout and the existing schedule repository tests.
 - Offline connected testing initially failed because the AGP 9.3 UTP artifact was not cached. The online retry downloaded the dependency and passed; no Gradle setting change was needed. AGP remains 9.3.0.
 - Manual UI navigation, notification delivery/reboot and the future Student logout button were not exercised by this automated test run.
+
+
+## Current integration update
+
+TV2 branch is integrated. StudentListActivity now exposes Môn học and Duyệt lịch. Admin subject UI is hosted by SubjectListActivity; approvals are protected by ScheduleApprovalRepository. Student can only submit Pending or cancel their own booking; editing Confirmed requires Admin review again. Past start times are rejected for new/edited bookings. Only Confirmed bookings are scheduled for reminders.
+
+Login, profile/subject saves, deletion and schedule writes use OperationViewModel to preserve accepted tasks/results across rotation. Admin lifecycle guards handle SQLite read failures with an error message. Details and navigation: app/ADMIN_INTEGRATION.md and PROJECT_CONTRACT.md.

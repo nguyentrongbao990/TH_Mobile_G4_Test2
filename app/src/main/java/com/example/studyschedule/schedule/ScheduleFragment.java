@@ -54,6 +54,7 @@ public final class ScheduleFragment extends Fragment {
                 if (!granted && getContext() != null) toast("Chưa được cấp quyền thông báo. Bạn vẫn có thể quản lý lịch.");
                 refresh();
             });
+    private com.example.studyschedule.auth.OperationViewModel mutationState;
     private View root;
     private Student student;
     private long loadedAccount = -1;
@@ -104,6 +105,26 @@ public final class ScheduleFragment extends Fragment {
                 selected.getYear(), selected.getMonthValue()-1, selected.getDayOfMonth()).show());
         getChildFragmentManager().setFragmentResultListener(ScheduleEditorDialog.REQUEST, getViewLifecycleOwner(),
                 (key, data) -> save(ScheduleEditorDialog.fromBundle(data)));
+        mutationState = new androidx.lifecycle.ViewModelProvider(this).get(com.example.studyschedule.auth.OperationViewModel.class);
+        mutationState.state().observe(getViewLifecycleOwner(), operation -> {
+            if (operation == null) return;
+            busy = operation.running;
+            setBusy(busy);
+            Fragment editor = getChildFragmentManager().findFragmentByTag(ScheduleEditorDialog.TAG);
+            if (editor instanceof ScheduleEditorDialog) ((ScheduleEditorDialog)editor).setSaving(busy);
+            if (busy) return;
+            mutationState.consume();
+            if (operation.error != null) {
+                String message = operation.error instanceof IllegalArgumentException || operation.error instanceof IllegalStateException
+                        ? operation.error.getMessage() : "Không lưu được thay đổi. Vui lòng thử lại.";
+                if (editor instanceof ScheduleEditorDialog) ((ScheduleEditorDialog)editor).showError(message);
+                else toast(message);
+            } else {
+                if (editor instanceof ScheduleEditorDialog) ((ScheduleEditorDialog)editor).dismissAllowingStateLoss();
+                toast((String)operation.value);
+            }
+            refresh();
+        });
         render();
     }
     @Override public void onResume() { super.onResume(); refresh(); }
@@ -236,19 +257,19 @@ public final class ScheduleFragment extends Fragment {
     }
     private void actions(StudySchedule schedule) {
         if (busy) return;
+        boolean cancelled = ScheduleValidator.CANCELLED.equals(schedule.getStatus());
         new MaterialAlertDialogBuilder(requireContext()).setTitle(subjectLabel(schedule.getSubjectId()))
-                .setItems(new String[]{"Sửa lịch", "Đổi trạng thái", "Xóa lịch"}, (dialog, which) -> {
-                    if (which == 0) editor(schedule);
-                    if (which == 1) new MaterialAlertDialogBuilder(requireContext()).setTitle("Đổi trạng thái")
-                            .setItems(new String[]{"Pending · Chờ xác nhận", "Confirmed · Đã xác nhận", "Cancelled · Đã hủy"},
-                                    (d, index) -> mutate(repo -> {
-                                        repo.changeStatus(schedule.getId(), ScheduleValidator.STATUSES[index]); return schedule.getId();
-                                    }, "Đã đổi trạng thái lịch học.", false)).show();
-                    if (which == 2) new MaterialAlertDialogBuilder(requireContext()).setTitle("Xóa lịch học?")
-                            .setMessage("Buổi học " + display(LocalDate.parse(schedule.getStudyDate())) + " lúc " + schedule.getStartTime() + " sẽ bị xóa.")
-                            .setNegativeButton("Giữ lại", null).setPositiveButton("Xóa", (d,w) -> mutate(repo -> {
-                                repo.delete(schedule.getId()); return schedule.getId();
-                            }, "Đã xóa lịch học.", false)).show();
+                .setItems(cancelled ? new String[]{"Xóa lịch"} : new String[]{"Sửa lịch (gửi duyệt lại)", "Hủy lịch", "Xóa lịch"}, (dialog, which) -> {
+                    int action = cancelled ? 2 : which;
+                    if (action == 0) editor(schedule);
+                    else new MaterialAlertDialogBuilder(requireContext())
+                            .setTitle(action == 1 ? "Hủy lịch học?" : "Xóa lịch học?")
+                            .setMessage("Buổi học " + display(LocalDate.parse(schedule.getStudyDate())) + " lúc " + schedule.getStartTime())
+                            .setNegativeButton("Giữ lại", null).setPositiveButton("Đồng ý", (d,w) -> mutate(repo -> {
+                                if (action == 1) repo.changeStatus(schedule.getId(), ScheduleValidator.CANCELLED);
+                                else repo.delete(schedule.getId());
+                                return schedule.getId();
+                            }, action == 1 ? "Đã hủy lịch học." : "Đã xóa lịch học.", false)).show();
                 }).show();
     }
     private void save(StudySchedule schedule) {
@@ -256,13 +277,10 @@ public final class ScheduleFragment extends Fragment {
     }
     private interface Mutation { long run(ScheduleRepository repository); }
     private void mutate(Mutation mutation, String success, boolean fromEditor) {
-        if (busy || root == null) { editorError("Đang tải dữ liệu. Vui lòng thử lưu lại."); return; }
-        int token = generation;
+        if (busy || root == null || mutationState.hasState()) { editorError("Đang tải dữ liệu. Vui lòng thử lưu lại."); return; }
         long account = loadedAccount;
         Context context = requireContext().getApplicationContext();
-        busy = true; setBusy(true);
-        io.execute(() -> {
-            String error = null, reminderError = null;
+        mutationState.submit(() -> {
             try (ScheduleRepository repository = new ScheduleRepository(context, account)) {
                 if (account <= 0 || StudentSession.accountId(context) != account)
                     throw new IllegalStateException("Phiên đã thay đổi. Vui lòng đăng nhập lại.");
@@ -271,25 +289,11 @@ public final class ScheduleFragment extends Fragment {
                     if (StudentSession.accountId(context) == account) {
                         ScheduleNotifications.clearReminder(context, id);
                         ScheduleNotifications.reconcile(context, account, repository.schedules());
-                        ScheduleNotifications.change(context, id, success);
+                        ScheduleNotifications.change(context, account, id, success);
                     }
-                } catch (RuntimeException e) { reminderError = "Lịch đã lưu; chưa thể cập nhật thông báo."; }
-            } catch (IllegalArgumentException | IllegalStateException e) { error = e.getMessage(); }
-            catch (RuntimeException e) { error = "Không lưu được thay đổi. Vui lòng tải lại và thử lại."; }
-            String failure = error, warning = reminderError;
-            main.post(() -> {
-                if (root == null || token != generation) return;
-                busy = false; setBusy(false);
-                if (failure != null) {
-                    if (fromEditor) editorError(failure); else toast(failure);
-                    return;
-                }
-                if (fromEditor) {
-                    Fragment dialog = getChildFragmentManager().findFragmentByTag(ScheduleEditorDialog.TAG);
-                    if (dialog instanceof ScheduleEditorDialog) ((ScheduleEditorDialog)dialog).dismissAllowingStateLoss();
-                }
-                toast(warning == null ? success : warning); refresh();
-            });
+                } catch (RuntimeException e) { return "Lịch đã lưu; chưa thể cập nhật thông báo."; }
+                return success;
+            }
         });
     }
     private void editorError(String message) {

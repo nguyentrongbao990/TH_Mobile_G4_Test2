@@ -11,8 +11,8 @@ Quyền sở hữu `schedule/` trong AGENTS.md/PROJECT_CONTRACT.md hiện còn t
 - Kiểm tra môn còn tồn tại, ngày thực (kể cả năm nhuận), giờ HH:mm, địa điểm, trạng thái.
 - Lịch cùng sinh viên/cùng ngày bị trùng nếu `old.startTime < new.endTime AND old.endTime > new.startTime`.
 - Kiểm tra và lưu trong cùng transaction; sửa loại chính ID hiện tại; lịch Cancelled không chặn giờ.
-- Chuyển Cancelled sang Pending/Confirmed kiểm tra trùng lại. Student tự quản lý ba trạng thái theo đề.
-- Lịch quá khứ vẫn xem/sửa/ghi nhận được; chỉ lịch trong tương lai mới có nhắc học. Không hỗ trợ buổi qua đêm.
+- Student không được khôi phục Cancelled; Admin xác nhận lại phải kiểm tra trùng giờ. Student chỉ tạo/sửa Pending và hủy Cancelled; Confirmed do Admin duyệt. Student sửa lịch đã xác nhận phải gửi duyệt lại.
+- Lịch quá khứ vẫn xem/hủy/xóa được; không đặt mới hoặc sửa lịch vào thời điểm đã qua. Chỉ lịch Confirmed trong tương lai mới có nhắc học. Không hỗ trợ buổi qua đêm.
 - Tìm môn/mã môn/địa điểm/ngày/giờ (không dấu), lọc trạng thái, lịch ngày/tuần/tháng.
 - Tuần bắt đầu thứ Hai. Số chấm trong lịch đếm tất cả lịch chưa hủy, độc lập bộ lọc tìm kiếm/trạng thái.
 - Form dùng picker, giữ bản nháp khi xoay màn hình; database chạy trên executor nền.
@@ -111,3 +111,12 @@ trong 15 phút tới để nhận nhắc sớm, rồi sửa/hủy để kiểm t
 - Cần kiểm tra thiết bị cho thay đổi mới: đăng nhập Student → về nền → xóa/hết phiên → mở lại;
   logout → Back; mở MainActivity với phiên Admin; xoay màn hình giữ bản nháp; chuyển hai Student.
 - Chưa kiểm thử thủ công giao diện/notification và nút logout mới trên emulator.
+
+
+## Bản tích hợp sau nhánh TV2
+
+- Admin vào StudentListActivity; các nút Môn học và Duyệt lịch mở quản lý môn và duyệt lịch thật.
+- Dropdown trạng thái trong editor đã thay bằng nhãn Pending. Menu Student chỉ còn sửa/gửi duyệt lại, hủy hoặc xóa. Repository từ chối tự Confirmed và mở lại Cancelled.
+- Tác vụ ghi và kết quả được giữ trong OperationViewModel khi xoay; editor khôi phục khóa lưu từ trạng thái tác vụ, không tự gửi lần hai.
+- StudentSession.clear/establish và việc hiển thị nhắc dùng cùng khóa ScheduleNotifications.class. Worker mang accountId cũ bị chặn trước notify; receipt chỉ được ghi nếu thông báo thực sự được đăng.
+- Không dùng UI test cũ coi Student tự Confirmed là hành vi đúng. Các regression test mới kiểm tra Admin duyệt, Pending sau sửa và chặn ngày/giờ quá khứ.

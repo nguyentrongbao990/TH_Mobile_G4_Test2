@@ -1,32 +1,22 @@
-# Member 2 â€” Admin Management
+# TV2 Admin management — integrated
 
-Implemented Java/XML UI: `com.example.studyschedule.studentadmin.AdminDashboardFragment`.
-The fragment contains student and subject tabs, search, add/edit forms, lists, and confirmed deletion.
-The host must validate an authenticated Admin session before showing the fragment. This module does not invent a session key or implement authentication.
+The TV2 branch codex/member2-admin-management is merged into main. Its public AdminDashboardFragment class and shared DatabaseHelper APIs are preserved.
 
-## Integration for Member 1 / host owner
+## Navigation
 
-After authenticating Admin, show the fragment in the host's FragmentContainerView:
+Admin login opens StudentListActivity. The Môn học button opens SubjectListActivity, which hosts AdminDashboardFragment. Add/edit subjects uses SubjectFormActivity. Student CRUD remains on TV1's existing StudentListActivity/StudentFormActivity to avoid two diverging implementations. The fragment's Sinh viên button returns to that screen. Duyệt lịch opens ScheduleApprovalActivity.
 
-```java
-getSupportFragmentManager().beginTransaction()
-    .replace(R.id.your_fragment_container, new AdminDashboardFragment())
-    .commit();
-```
+All three activities are registered as non-exported and protected by AdminActivity. SQLite reads and writes run on workers. Accepted writes and their results are retained with OperationViewModel across rotation. Subject codes, required fields and non-negative integer credits are validated; referenced subjects cannot be deleted.
 
-Replace the example container ID with the host layout's actual ID. No new activity, Manifest entry, or Gradle dependency is required. MainActivity and its layout were left untouched.
+ScheduleApprovalRepository verifies the Admin account in SQLite. Confirming a past or conflicting booking is rejected; Student cannot use this repository to approve. Student schedule edits are submitted as Pending, and only Admin confirms them.
 
-## Shared database implementation
+## Tests
 
-After pulling Member 1 commit 73a444a, DatabaseHelper uses Member 1's implementation unchanged, including the frozen student/subject APIs.
-Student creation inserts account (role Student) and student atomically. Student deletion removes its account, cascading student and schedule rows. Student updates preserve accountId. Subject deletion respects existing schedule references. Searches use bound parameters and escape LIKE wildcards.
-Member 1's shared database now implements authentication, student lookup, schedule CRUD/conflict checks, and PBKDF2 password hashing. Session storage and login UI still require integration by the host owner.
+AdminCrudTest now uses a disposable database, not the installed app database. CRUD calls are tested in their own transactions rather than inside an extra outer transaction: Android nested transaction failure only rolls back the outer transaction when it ends, so inspecting it before the outer end gave a misleading failed assertion.
 
-## Verification
+IntegratedUiFlowTest exercises real screens with unique disposable fixture rows: login Admin → create/edit subject → approve booking → login Student → edit Confirmed to Pending → cancel → logout. It deletes only its own rows and restores the previous stored login. OperationViewModelTest checks retention and exactly one accepted task through a recreated ViewModelProvider/store.
 
-Run `gradlew.bat assembleDebug` from the project root.
-With an Android emulator/device connected, run `gradlew.bat connectedDebugAndroidTest`. AdminCrudTest exercises account rollback, deletion cleanup, subject persistence, and foreign-key deletion restrictions within rolled-back test transactions.
+Build/test command:
+`gradlew.bat assembleDebug testDebugUnitTest connectedDebugAndroidTest lintDebug --no-configuration-cache --offline --console=plain`
 
-Manual UI checks after host integration: create student with account; reject duplicate code/username; edit and search; create/edit subject; reject negative/invalid credits; reject deletion of a referenced subject; cancel and confirm student deletion; rotate and reopen screens.
-
-The repository ownership documents still describe the previous assignment. The current user-approved assignment is Member 2 = Admin Management; coordinate documentation updates with Member 1.
+No schema migration or Gradle/dependency change is required. AGP stays 9.3.0.

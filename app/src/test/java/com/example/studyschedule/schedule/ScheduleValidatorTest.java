@@ -43,4 +43,13 @@ public class ScheduleValidatorTest {
         assertTrue(ScheduleValidator.overlaps("10:00","11:00","09:00","12:00"));
         assertTrue(ScheduleValidator.overlaps("09:00","10:00","09:00","10:00"));
     }
+    @Test public void bookingMustStartStrictlyAfterCurrentTime() {
+        java.time.Clock clock = java.time.Clock.fixed(java.time.Instant.parse("2028-02-29T09:00:00Z"), java.time.ZoneOffset.UTC);
+        StudySchedule s = valid();
+        assertThrows(IllegalArgumentException.class, () -> ScheduleValidator.validateFuture(s, clock));
+        s.setStudyDate("2028-02-28");
+        assertThrows(IllegalArgumentException.class, () -> ScheduleValidator.validateFuture(s, clock));
+        s.setStudyDate("2028-02-29"); s.setStartTime("09:01");
+        ScheduleValidator.validateFuture(s, clock);
+    }
 }

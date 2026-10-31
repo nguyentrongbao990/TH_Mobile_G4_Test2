@@ -85,4 +85,16 @@ LoginActivity is the launcher. Both fresh login and restored sessions route Admi
 
 The manifest registers the notification permission, boot permission and reminder/restore receivers supplied by Member 3. Runtime notification permission remains requested by the schedule UI.
 
-MainActivity and activity_main.xml remain untouched by Member 1. Member 3 still needs to guard MainActivity on resume and expose Student logout using SessionManager.logout(Activity).
+MainActivity now guards the session on resume, redirects Admin and exposes Student logout using SessionManager.logout(Activity), as supplied by the Member 3 branch.
+
+## Integrated approval rules
+
+- Student-facing ScheduleRepository creates/edits only Pending schedules. A Confirmed booking edited by Student is submitted as Pending for Admin review again. Forged Confirmed values are rejected by the repository, not just hidden by the UI.
+- Student can cancel their own booking. A Cancelled booking cannot be edited/reactivated by Student; a new booking must be created.
+- New or edited bookings must start in the future (device local time). Existing historical data remains readable/cancellable/deletable. Admin cannot confirm a past booking.
+- Admin uses Student management → Duyệt lịch to Confirm or Cancel. ScheduleApprovalRepository verifies the account's Admin role in SQLite and delegates ownership/conflict-safe writes to the unchanged DatabaseHelper API.
+- Generic DatabaseHelper remains role-neutral for Admin/fixture use. Student UI must use the account-bound ScheduleRepository; do not expose generic mutations directly to Student.
+- Only Confirmed future bookings generate reminders. Session changes and notification delivery share a lock to prevent stale-account notifications after logout.
+- Accepted UI writes/results use OperationViewModel across configuration changes; reopening a rotated form does not submit the write a second time. This is not a background job guarantee across process death.
+- Admin navigation: StudentListActivity → SubjectListActivity (hosts TV2 AdminDashboardFragment), SubjectFormActivity and ScheduleApprovalActivity. Duplicate Student forms in TV2's original fragment are replaced by navigation to TV1's existing Student screen.
+- Integration fixes across member-owned files in this change were explicitly authorized by the user; no public shared API or database schema/version was changed.

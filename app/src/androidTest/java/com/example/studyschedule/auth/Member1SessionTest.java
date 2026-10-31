@@ -8,6 +8,10 @@ import android.database.sqlite.SQLiteDatabase;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.studyschedule.data.DatabaseHelper;
+import com.example.studyschedule.data.ScheduleApprovalRepository;
+import com.example.studyschedule.model.Subject;
+import com.example.studyschedule.model.StudySchedule;
+import java.time.LocalDate;
 import com.example.studyschedule.model.Account;
 import com.example.studyschedule.model.Student;
 import com.example.studyschedule.schedule.StudentSession;
@@ -130,5 +134,49 @@ public class Member1SessionTest {
         StudentSession.establish(context, b.getId());
         assertFalse(session.isLoggedIn());
         assertEquals(-1L, StudentSession.accountId(context));
+    }
+
+    @Test public void onlyAdminCanApproveAndReactivationStillChecksConflict() {
+        Account admin = db.authenticate("admin", "admin123");
+        long student = db.addStudent(new Student(0,"APPROVE","Student","","",0), "approval_student", "password1");
+        Account account = db.authenticate("approval_student", "password1");
+        long subject = db.addSubject(new Subject(0,"APPROVE-SUB","Subject","",3));
+        String date = LocalDate.now().plusDays(1).toString();
+        long id = db.addSchedule(new StudySchedule(0,student,subject,date,"09:00","10:00","A101","Pending"));
+        ScheduleApprovalRepository denied = new ScheduleApprovalRepository(db, account.getId());
+        assertThrows(SecurityException.class, denied::getAllSchedules);
+        assertThrows(SecurityException.class, () -> denied.setStatus(id,"Confirmed"));
+        ScheduleApprovalRepository approvals = new ScheduleApprovalRepository(db, admin.getId());
+        assertEquals(1, approvals.getAllSchedules().size());
+        assertTrue(approvals.setStatus(id,"Confirmed"));
+        assertEquals("Confirmed",db.getScheduleById(id,student).getStatus());
+        assertTrue(approvals.setStatus(id,"Cancelled"));
+        long replacement = db.addSchedule(new StudySchedule(0,student,subject,date,"09:30","10:30","A102","Pending"));
+        assertTrue(replacement > 0);
+        assertFalse(approvals.setStatus(id,"Confirmed"));
+        assertEquals("Cancelled",db.getScheduleById(id,student).getStatus());
+        long past = db.addSchedule(new StudySchedule(0,student,subject,LocalDate.now().minusDays(1).toString(),"09:00","10:00","A101","Pending"));
+        assertThrows(IllegalArgumentException.class, () -> approvals.setStatus(past,"Confirmed"));
+    }
+    @Test public void scheduleSessionChangesUseNotificationDeliveryLock() throws Exception {
+        StudentSession.establish(context, 123);
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch finished = new java.util.concurrent.CountDownLatch(1);
+        Thread logout = new Thread(() -> {
+            entered.countDown();
+            try { StudentSession.clear(context); } finally { finished.countDown(); }
+        });
+        synchronized (com.example.studyschedule.notification.ScheduleNotifications.class) {
+            logout.start();
+            assertTrue(entered.await(2, java.util.concurrent.TimeUnit.SECONDS));
+            assertFalse(finished.await(100, java.util.concurrent.TimeUnit.MILLISECONDS));
+            assertEquals(123, StudentSession.accountId(context));
+        }
+        assertTrue(finished.await(2, java.util.concurrent.TimeUnit.SECONDS));
+        assertEquals(-1, StudentSession.accountId(context));
+        // A stale worker must not post or record a delivered notification after logout.
+        com.example.studyschedule.notification.ScheduleNotifications.change(context, 123, 999, "stale");
+        assertFalse(context.getSharedPreferences("schedule_notifications", Context.MODE_PRIVATE)
+                .getStringSet("displayed_tags", java.util.Collections.emptySet()).contains("change:999"));
     }
 }

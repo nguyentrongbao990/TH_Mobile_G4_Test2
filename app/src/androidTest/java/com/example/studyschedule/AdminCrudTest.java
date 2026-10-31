@@ -13,13 +13,30 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class AdminCrudTest {
+    private Context context;
+    private String prefix;
+    @org.junit.Before public void isolateDatabase() {
+        Context target = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        prefix = "admin_crud_" + System.nanoTime() + "_";
+        context = new android.content.ContextWrapper(target) {
+            @Override public Context getApplicationContext() { return this; }
+            @Override public java.io.File getDatabasePath(String name) { return new java.io.File(target.getCacheDir(), prefix + name); }
+            @Override public SQLiteDatabase openOrCreateDatabase(String name, int mode, SQLiteDatabase.CursorFactory factory) {
+                return SQLiteDatabase.openOrCreateDatabase(getDatabasePath(name), factory);
+            }
+            @Override public SQLiteDatabase openOrCreateDatabase(String name, int mode, SQLiteDatabase.CursorFactory factory, android.database.DatabaseErrorHandler handler) {
+                return SQLiteDatabase.openDatabase(getDatabasePath(name).getPath(), factory, SQLiteDatabase.CREATE_IF_NECESSARY, handler);
+            }
+        };
+    }
+    @org.junit.After public void deleteFixtureDatabase() {
+        SQLiteDatabase.deleteDatabase(context.getDatabasePath("study_schedule.db"));
+    }
     @Test public void studentCreationRollsBackAndDeletionCascades() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key = "test_" + System.nanoTime();
         try (DatabaseHelper helper = new DatabaseHelper(context)) {
             SQLiteDatabase db = helper.getWritableDatabase();
-            db.beginTransaction();
-            try {
+            {
                 long id = helper.addStudent(new Student(0,key,"Test", "", "",0), key, "pass");
                 assertTrue(id > 0);
                 assertEquals(-1, helper.addStudent(new Student(0,key,"Duplicate", "", "",0), key + "other", "pass"));
@@ -31,15 +48,14 @@ public class AdminCrudTest {
                 try (android.database.Cursor c = db.rawQuery("SELECT count(*) FROM accounts WHERE username = ?", new String[]{key})) {
                     assertTrue(c.moveToFirst()); assertEquals(0,c.getInt(0));
                 }
-            } finally { db.endTransaction(); }
+            }
         }
     }
     @Test public void subjectCrudAndReferencedSubjectRestriction() {
-        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         String key = "test_" + System.nanoTime();
         try (DatabaseHelper helper = new DatabaseHelper(context)) {
-            SQLiteDatabase db = helper.getWritableDatabase(); db.beginTransaction();
-            try {
+            SQLiteDatabase db = helper.getWritableDatabase();
+            {
                 long subjectId = helper.addSubject(new Subject(0,key,"Subject","Description",3));
                 assertTrue(subjectId > 0);
                 assertTrue(helper.updateSubject(new Subject(subjectId,key,"Updated","",4)));
@@ -49,7 +65,7 @@ public class AdminCrudTest {
                 assertFalse(helper.deleteSubject(subjectId));
                 assertTrue(helper.deleteStudent(studentId));
                 assertTrue(helper.deleteSubject(subjectId));
-            } finally { db.endTransaction(); }
+            }
         }
     }
 }

@@ -29,6 +29,9 @@
             android:windowSoftInputMode="adjustResize" />
         <activity android:name=".studentadmin.StudentFormActivity" android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".studentadmin.SubjectListActivity" android:exported="false" />
+        <activity android:name=".studentadmin.SubjectFormActivity" android:exported="false" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".studentadmin.ScheduleApprovalActivity" android:exported="false" />
         <receiver android:name=".notification.ScheduleReminderReceiver" android:exported="false" />
         <receiver android:name=".notification.ScheduleRestoreReceiver" android:exported="false">
             <intent-filter>

@@ -45,7 +45,8 @@ public class ScheduleRepositoryTest {
         assertEquals("09:00",saved.getStartTime()); assertEquals("10:00",saved.getEndTime());
         saved.setLocation("Thư viện"); saved.setSubjectId(2); first.save(saved);
         assertEquals("Thư viện",first.find(id).getLocation()); assertEquals(2,first.find(id).getSubjectId());
-        first.changeStatus(id,"Confirmed"); assertEquals("Confirmed",first.find(id).getStatus());
+        assertThrows(IllegalArgumentException.class, () -> first.changeStatus(id,"Confirmed"));
+        assertEquals("Pending",first.find(id).getStatus());
         first.delete(id); assertTrue(first.schedules().isEmpty());
     }
     @Test public void rejectsOverlapsButAllowsAdjacentDifferentDaysAndStudents() {
@@ -70,7 +71,9 @@ public class ScheduleRepositoryTest {
         long replacement = first.save(schedule(10,"09:30","10:30"));
         assertThrows(IllegalArgumentException.class, () -> first.changeStatus(id,"Confirmed"));
         assertEquals("Cancelled",first.find(id).getStatus());
-        first.delete(replacement); first.changeStatus(id,"Pending"); assertEquals("Pending",first.find(id).getStatus());
+        first.delete(replacement);
+        assertThrows(IllegalArgumentException.class, () -> first.changeStatus(id,"Pending"));
+        assertEquals("Cancelled",first.find(id).getStatus());
     }
     @Test public void cannotReadModifyDeleteOrSpoofOtherStudentsSchedule() {
         long id = first.save(schedule(10,"09:00","10:00"));
@@ -96,5 +99,26 @@ public class ScheduleRepositoryTest {
     @Test public void listsInChronologicalOrder() {
         first.save(schedule(10,"15:00","16:00")); first.save(schedule(10,"08:00","09:00"));
         assertEquals("08:00",first.schedules().get(0).getStartTime());
+    }
+    @Test public void studentsCannotSelfConfirmOrModifyCancelledSchedule() {
+        StudySchedule s = schedule(10,"09:00","10:00");
+        s.setStatus("Confirmed");
+        assertThrows(IllegalArgumentException.class, () -> first.save(s));
+        s.setStatus("Pending");
+        long id = first.save(s);
+        db.execSQL("UPDATE study_schedules SET status='Confirmed' WHERE id=?", new Object[]{id});
+        StudySchedule edit = first.find(id); edit.setStartTime("09:15");
+        assertThrows(IllegalArgumentException.class, () -> first.save(edit));
+        edit.setStatus("Pending"); first.save(edit);
+        assertEquals("Pending",first.find(id).getStatus());
+        first.changeStatus(id,"Cancelled");
+        assertThrows(IllegalArgumentException.class, () -> first.save(edit));
+        assertEquals("Cancelled",first.find(id).getStatus());
+    }
+    @Test public void newBookingsInThePastAreRejected() {
+        StudySchedule past = schedule(10,"09:00","10:00");
+        past.setStudyDate(java.time.LocalDate.now().minusDays(1).toString());
+        assertThrows(IllegalArgumentException.class, () -> first.save(past));
+        assertTrue(first.schedules().isEmpty());
     }
 }

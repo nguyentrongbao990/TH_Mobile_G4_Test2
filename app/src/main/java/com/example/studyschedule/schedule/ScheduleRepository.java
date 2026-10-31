@@ -83,8 +83,14 @@ public final class ScheduleRepository implements AutoCloseable {
             if (schedule.getStudentId() != studentId) throw new IllegalArgumentException("Bạn chỉ được sửa lịch của mình.");
             ScheduleValidator.validate(schedule);
             if (schedule.getId() < 0) throw new IllegalArgumentException("Mã lịch không hợp lệ.");
-            if (schedule.getId() > 0 && findOwned(schedule.getId(), studentId) == null)
+            StudySchedule current = schedule.getId() > 0 ? findOwned(schedule.getId(), studentId) : null;
+            if (schedule.getId() > 0 && current == null)
                 throw new IllegalArgumentException("Lịch không tồn tại hoặc không thuộc về bạn.");
+            if (!ScheduleValidator.PENDING.equals(schedule.getStatus()))
+                throw new IllegalArgumentException("Sinh viên chỉ được gửi lịch chờ duyệt; Admin mới được xác nhận.");
+            if (current != null && ScheduleValidator.CANCELLED.equals(current.getStatus()))
+                throw new IllegalArgumentException("Lịch đã hủy không thể sửa hoặc khôi phục. Hãy đặt lịch mới.");
+            ScheduleValidator.validateFuture(schedule, java.time.Clock.systemDefaultZone());
             try (Cursor c = db.query("subjects", new String[]{"id"}, "id=?", args(schedule.getSubjectId()), null, null, null)) {
                 if (!c.moveToFirst()) throw new IllegalArgumentException("Môn học không còn tồn tại.");
             }
@@ -114,8 +120,12 @@ public final class ScheduleRepository implements AutoCloseable {
         try {
             StudySchedule schedule = find(id);
             if (schedule == null) throw new IllegalArgumentException("Không tìm thấy lịch của bạn.");
-            schedule.setStatus(status);
-            save(schedule); // Nested transaction keeps read/check/write atomic, including reactivation.
+            if (!ScheduleValidator.CANCELLED.equals(status))
+                throw new IllegalArgumentException("Sinh viên chỉ được hủy lịch; Admin mới được xác nhận.");
+            ContentValues values = new ContentValues();
+            values.put("status", ScheduleValidator.CANCELLED);
+            if (db.update("study_schedules", values, "id=? AND studentId=?", args(id, schedule.getStudentId())) != 1)
+                throw new IllegalStateException("Không thể hủy lịch.");
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
     }

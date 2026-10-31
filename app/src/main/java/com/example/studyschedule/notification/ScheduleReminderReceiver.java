@@ -19,15 +19,14 @@ public final class ScheduleReminderReceiver extends BroadcastReceiver {
             try (ScheduleRepository repository = new ScheduleRepository(context, accountId)) {
                 StudySchedule schedule = repository.find(intent.getLongExtra("scheduleId", -1));
                 if (StudentSession.accountId(context) != accountId || schedule == null
-                        || ScheduleValidator.CANCELLED.equals(schedule.getStatus())
+                        || !ScheduleValidator.CONFIRMED.equals(schedule.getStatus())
                         || ScheduleNotifications.startsAt(schedule) <= System.currentTimeMillis()
                         || !ScheduleNotifications.fingerprint(schedule).equals(intent.getStringExtra("fingerprint"))) return;
                 String subjectName = "Môn học";
                 for (Subject subject : repository.subjects())
                     if (subject.getId() == schedule.getSubjectId()) { subjectName = subject.getSubjectName(); break; }
                 if (ScheduleNotifications.allowed(context)) {
-                    ScheduleNotifications.upcoming(context, schedule, subjectName);
-                    ScheduleNotifications.markDelivered(context, accountId, schedule);
+                    ScheduleNotifications.upcoming(context, accountId, schedule, subjectName);
                 }
             } catch (RuntimeException e) { Log.e("ScheduleReminder", "Unable to deliver reminder", e); }
             finally { pending.finish(); }

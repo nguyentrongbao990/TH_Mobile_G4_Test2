@@ -19,6 +19,9 @@ public class StudentFormActivity extends AdminActivity {
     private long studentId;
     private long accountId;
     private boolean busy;
+    private boolean profileLoaded;
+    private boolean loading;
+    private com.example.studyschedule.auth.OperationViewModel operation;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -33,6 +36,19 @@ public class StudentFormActivity extends AdminActivity {
         password = findViewById(R.id.studentadmin_password);
         error = findViewById(R.id.studentadmin_form_error);
         save = findViewById(R.id.studentadmin_save);
+        operation = new androidx.lifecycle.ViewModelProvider(this).get(com.example.studyschedule.auth.OperationViewModel.class);
+        operation.state().observe(this, result -> {
+            if (result == null) return;
+            setBusy(result.running || loading);
+            if (result.running) return;
+            operation.consume();
+            if (result.error != null) { error.setText("Không lưu được sinh viên. Vui lòng thử lại."); return; }
+            String message = (String)result.value;
+            if (!message.isEmpty()) { error.setText(message); return; }
+            password.setText("");
+            Toast.makeText(this, "Student saved", Toast.LENGTH_SHORT).show();
+            setResult(RESULT_OK); finish();
+        });
         studentId = getIntent().getLongExtra(EXTRA_STUDENT_ID, -1);
         ((TextView)findViewById(R.id.studentadmin_form_title)).setText(studentId > 0 ? "Edit student" : "Add student");
         save.setOnClickListener(v -> saveStudent());
@@ -40,6 +56,7 @@ public class StudentFormActivity extends AdminActivity {
         if (studentId > 0) {
             findViewById(R.id.studentadmin_credentials).setVisibility(View.GONE);
             ((TextView)findViewById(R.id.studentadmin_form_note)).setText("Edit profile details. Existing login credentials stay unchanged.");
+            loading = true;
             setBusy(true);
             execute(() -> {
                 if (!session.isAdmin()) throw new SecurityException();
@@ -54,11 +71,13 @@ public class StudentFormActivity extends AdminActivity {
                 }
                 accountId = s.getAccountId();
                 // Preserve edits restored by Android after rotation.
-                if (state == null) {
+                if (state == null || !state.getBoolean("profileLoaded", false)) {
                     code.setText(s.getStudentCode()); name.setText(s.getFullname());
                     email.setText(s.getEmail()); phone.setText(s.getPhone());
                 }
-                setBusy(false);
+                profileLoaded = true;
+                loading = false;
+                setBusy(operation.isRunning());
             }, e -> { error.setText("Unable to load student. Close and reopen this form."); });
         }
     }
@@ -71,7 +90,7 @@ public class StudentFormActivity extends AdminActivity {
     private void setBusy(boolean value) { busy = value; save.setEnabled(!value); }
 
     private void saveStudent() {
-        if (busy || !session.requireAdmin(this)) return;
+        if (busy || !checkAdmin() || operation.hasState()) return;
         if (!required(code, "Student code") || !required(name, "Full name")) return;
         if (!text(email).isEmpty() && !Patterns.EMAIL_ADDRESS.matcher(text(email)).matches()) {
             email.setError("Enter a valid email address"); return;
@@ -84,24 +103,24 @@ public class StudentFormActivity extends AdminActivity {
         String user = text(username), pass = password.getText().toString();
         setBusy(true);
         error.setText("");
-        execute(() -> {
-            if (!session.isAdmin()) throw new SecurityException();
-            try (DatabaseHelper db = new DatabaseHelper(getApplicationContext())) {
+        android.content.Context context = getApplicationContext();
+        long editingId = studentId;
+        operation.submit(() -> {
+            if (!new com.example.studyschedule.auth.SessionManager(context).isAdmin()) throw new SecurityException();
+            try (DatabaseHelper db = new DatabaseHelper(context)) {
                 for (Student other : db.getAllStudents()) {
-                    if (other.getId() != studentId && other.getStudentCode().equals(student.getStudentCode()))
+                    if (other.getId() != editingId && other.getStudentCode().equals(student.getStudentCode()))
                         return "Student code already exists. Choose another code.";
                 }
-                boolean saved = studentId > 0 ? db.updateStudent(student) : db.addStudent(student, user, pass) > 0;
-                return saved ? "" : (studentId > 0 ? "Student was not saved. It may have been deleted or its code is in use."
+                boolean saved = editingId > 0 ? db.updateStudent(student) : db.addStudent(student, user, pass) > 0;
+                return saved ? "" : (editingId > 0 ? "Student was not saved. It may have been deleted or its code is in use."
                         : "Could not create student. Username or student code may already be in use.");
             }
-        }, message -> {
-            setBusy(false);
-            if (!message.isEmpty()) { error.setText(message); return; }
-            password.setText("");
-            Toast.makeText(this, "Student saved", Toast.LENGTH_SHORT).show();
-            setResult(RESULT_OK);
-            finish();
-        }, e -> { setBusy(false); error.setText("Unable to save student. Please try again."); });
+        });
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        out.putBoolean("profileLoaded", profileLoaded);
+        super.onSaveInstanceState(out);
     }
 }
