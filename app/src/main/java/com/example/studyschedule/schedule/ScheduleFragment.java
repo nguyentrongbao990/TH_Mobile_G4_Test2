@@ -231,20 +231,33 @@ public final class ScheduleFragment extends Fragment {
     }
 
     private void editor(StudySchedule schedule) {
+        if (schedule != null && ScheduleValidator.CONFIRMED.equals(schedule.getStatus())) {
+            toast("Lịch đã được xác nhận, không thể sửa nội dung.");
+            return;
+        }
         if (busy || student == null || subjects.isEmpty() || getChildFragmentManager().findFragmentByTag(ScheduleEditorDialog.TAG) != null) return;
         ScheduleEditorDialog.create(student.getId(), subjects, schedule, selected).show(getChildFragmentManager(), ScheduleEditorDialog.TAG);
     }
     private void actions(StudySchedule schedule) {
         if (busy) return;
+        if (ScheduleValidator.CONFIRMED.equals(schedule.getStatus())) {
+            new MaterialAlertDialogBuilder(requireContext()).setTitle("Lịch đã được xác nhận")
+                    .setMessage("Bạn chỉ có thể xem lịch này; không được sửa, đổi trạng thái, hủy hoặc xóa.")
+                    .setPositiveButton("Đóng", null).show();
+            return;
+        }
+        boolean cancelled = ScheduleValidator.CANCELLED.equals(schedule.getStatus());
         new MaterialAlertDialogBuilder(requireContext()).setTitle(subjectLabel(schedule.getSubjectId()))
-                .setItems(new String[]{"Sửa lịch", "Đổi trạng thái", "Xóa lịch"}, (dialog, which) -> {
+                .setItems(cancelled ? new String[]{"Sửa thông tin lịch", "Xóa lịch"}
+                                : new String[]{"Sửa thông tin lịch", "Hủy lịch", "Xóa lịch"}, (dialog, which) -> {
                     if (which == 0) editor(schedule);
-                    if (which == 1) new MaterialAlertDialogBuilder(requireContext()).setTitle("Đổi trạng thái")
-                            .setItems(new String[]{"Pending · Chờ xác nhận", "Confirmed · Đã xác nhận", "Cancelled · Đã hủy"},
-                                    (d, index) -> mutate(repo -> {
-                                        repo.changeStatus(schedule.getId(), ScheduleValidator.STATUSES[index]); return schedule.getId();
-                                    }, "Đã đổi trạng thái lịch học.", false)).show();
-                    if (which == 2) new MaterialAlertDialogBuilder(requireContext()).setTitle("Xóa lịch học?")
+                    if (!cancelled && which == 1) new MaterialAlertDialogBuilder(requireContext()).setTitle("Hủy lịch học?")
+                            .setMessage("Lịch sẽ chuyển sang trạng thái đã hủy. Bạn không thể tự kích hoạt lại lịch này.")
+                            .setNegativeButton("Quay lại", null).setPositiveButton("Hủy lịch", (d, w) -> mutate(repo -> {
+                                repo.cancel(schedule.getId()); return schedule.getId();
+                            }, "Đã hủy lịch học.", false)).show();
+                    if ((cancelled && which == 1) || (!cancelled && which == 2))
+                            new MaterialAlertDialogBuilder(requireContext()).setTitle("Xóa lịch học?")
                             .setMessage("Buổi học " + display(LocalDate.parse(schedule.getStudyDate())) + " lúc " + schedule.getStartTime() + " sẽ bị xóa.")
                             .setNegativeButton("Giữ lại", null).setPositiveButton("Xóa", (d,w) -> mutate(repo -> {
                                 repo.delete(schedule.getId()); return schedule.getId();

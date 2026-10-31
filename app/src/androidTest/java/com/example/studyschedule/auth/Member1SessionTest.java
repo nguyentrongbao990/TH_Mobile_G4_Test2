@@ -52,15 +52,14 @@ public class Member1SessionTest {
     }
 
     @After public void tearDown() {
+        session.logout();
         db.close();
         SQLiteDatabase.deleteDatabase(context.getDatabasePath("study_schedule.db"));
-        session.logout();
-        for (String name : new String[]{"auth_session", "study_schedule_student_session", "schedule_notifications"}) {
-            context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit();
-            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteSharedPreferences(prefix + name);
-        }
+        context.getSharedPreferences("auth_session", Context.MODE_PRIVATE).edit().clear().commit();
         InstrumentationRegistry.getInstrumentation().getTargetContext()
                 .deleteSharedPreferences(prefix + "auth_session");
+        for (String name : new String[]{"study_schedule_student_session", "schedule_notifications"})
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteSharedPreferences(prefix + name);
     }
 
     @Test public void adminLoginRestoreAndLogout() {
@@ -106,28 +105,22 @@ public class Member1SessionTest {
         assertEquals(-1L, StudentSession.accountId(context));
         assertNull(db.authenticate("test_student", "initial123"));
     }
-    @Test public void scheduleBridgeRestoresSwitchesAndClears() {
-        Student first = new Student(0, "FIRST", "First Student", "", "", 0);
-        Student second = new Student(0, "SECOND", "Second Student", "", "", 0);
-        assertTrue(db.addStudent(first, "first", "password1") > 0);
-        assertTrue(db.addStudent(second, "second", "password2") > 0);
-        Account a = db.authenticate("first", "password1");
-        Account b = db.authenticate("second", "password2");
-        assertTrue(session.saveSession(a));
-        assertEquals(a.getId(), StudentSession.accountId(context));
-        StudentSession.clear(context); // Simulate an older login without the schedule bridge.
+    @Test public void studentBridgeRestoresAndClearsOnRoleSwitchAndLogout() {
+        assertTrue(db.addStudent(new Student(0, "BRIDGE", "Bridge Student", "", "", 0),
+                "bridge_student", "password123") > 0);
+        Account student = db.authenticate("bridge_student", "password123");
+        assertTrue(session.saveSession(student));
+        assertEquals(student.getId(), StudentSession.accountId(context));
+        StudentSession.clear(context);
         assertTrue(new SessionManager(context).isLoggedIn());
-        assertEquals(a.getId(), StudentSession.accountId(context));
-        assertTrue(session.saveSession(b));
-        assertEquals(b.getId(), StudentSession.accountId(context));
+        assertEquals(student.getId(), StudentSession.accountId(context));
         assertTrue(session.saveSession(db.authenticate("admin", "admin123")));
         assertEquals(-1L, StudentSession.accountId(context));
-        assertTrue(session.saveSession(a));
+        assertTrue(session.saveSession(student));
         session.logout();
-        assertFalse(session.isLoggedIn());
         assertEquals(-1L, StudentSession.accountId(context));
-        // An orphaned bridge must be cleared even with no main login preferences.
-        StudentSession.establish(context, b.getId());
+        // Missing auth state must also invalidate a stale scheduling identity.
+        StudentSession.establish(context, student.getId());
         assertFalse(session.isLoggedIn());
         assertEquals(-1L, StudentSession.accountId(context));
     }

@@ -1,0 +1,4 @@
+<resources>
+    <string name="integration_logout">Đăng xuất</string>
+    <string name="integration_identity">%1$s · %2$s</string>
+</resources>

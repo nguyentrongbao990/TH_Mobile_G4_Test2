@@ -14,7 +14,6 @@ import com.example.studyschedule.schedule.StudentSession;
  * Call requireLogin/requireAdmin in onResume of protected screens.
  */
 public final class SessionManager {
-    private static final Object SESSION_LOCK = new Object();
     private final Context context;
     private final SharedPreferences prefs;
 
@@ -25,59 +24,52 @@ public final class SessionManager {
 
     /** Call only with the Account returned by DatabaseHelper.authenticate. */
     public boolean saveSession(Account account) {
-        synchronized (SESSION_LOCK) {
-            if (account == null || account.getId() <= 0
-                    || !("Admin".equals(account.getRole()) || "Student".equals(account.getRole()))) return false;
-            long studentId = -1;
-            try (DatabaseHelper db = new DatabaseHelper(context)) {
-                try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
-                        "id=? AND username=? AND role=?", new String[]{Long.toString(account.getId()),
-                                account.getUsername(), account.getRole()}, null, null, null)) {
-                    if (!c.moveToFirst()) return false;
-                }
-                if ("Student".equals(account.getRole())) {
-                    Student student = db.getStudentByAccountId(account.getId());
-                    if (student == null) return false;
-                    studentId = student.getId();
-                }
+        if (account == null || account.getId() <= 0
+                || !("Admin".equals(account.getRole()) || "Student".equals(account.getRole()))) return false;
+        long studentId = -1;
+        try (DatabaseHelper db = new DatabaseHelper(context)) {
+            try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
+                    "id=? AND username=? AND role=?", new String[]{Long.toString(account.getId()),
+                            account.getUsername(), account.getRole()}, null, null, null)) {
+                if (!c.moveToFirst()) return false;
             }
-            boolean saved = prefs.edit().clear().putLong("accountId", account.getId())
-                    .putString("username", account.getUsername()).putString("role", account.getRole())
-                    .putLong("studentId", studentId).commit();
-            if (!saved) {
-                logout();
-                return false;
+            if ("Student".equals(account.getRole())) {
+                Student student = db.getStudentByAccountId(account.getId());
+                if (student == null) return false;
+                studentId = student.getId();
             }
-            syncScheduleSession();
-            return true;
         }
+        boolean saved = prefs.edit().clear().putLong("accountId", account.getId())
+                .putString("username", account.getUsername()).putString("role", account.getRole())
+                .putLong("studentId", studentId).commit();
+        if (!saved) { logout(); return false; }
+        syncStudentSession();
+        return true;
     }
 
     /** Rechecks persisted identity and student link; deleted accounts cannot restore a session. */
     public boolean isLoggedIn() {
-        synchronized (SESSION_LOCK) {
-            long accountId = getAccountId();
-            String role = getRole();
-            if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) {
-                logout();
-                return false;
-            }
-            boolean valid;
-            try (DatabaseHelper db = new DatabaseHelper(context)) {
-                try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
-                        "id=? AND username=? AND role=?", new String[]{Long.toString(accountId),
-                                getUsername(), role}, null, null, null)) {
-                    valid = c.moveToFirst();
-                }
-                if (valid && "Student".equals(role)) {
-                    Student student = db.getStudentByAccountId(accountId);
-                    valid = student != null && student.getId() == getStudentId();
-                }
-            }
-            if (!valid) logout();
-            else syncScheduleSession();
-            return valid;
+        long accountId = getAccountId();
+        String role = getRole();
+        if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) {
+            logout();
+            return false;
         }
+        boolean valid;
+        try (DatabaseHelper db = new DatabaseHelper(context)) {
+            try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
+                    "id=? AND username=? AND role=?", new String[]{Long.toString(accountId),
+                            getUsername(), role}, null, null, null)) {
+                valid = c.moveToFirst();
+            }
+            if (valid && "Student".equals(role)) {
+                Student student = db.getStudentByAccountId(accountId);
+                valid = student != null && student.getId() == getStudentId();
+            }
+        }
+        if (!valid) logout();
+        else syncStudentSession();
+        return valid;
     }
 
     public long getAccountId() { return prefs.getLong("accountId", -1); }
@@ -86,15 +78,14 @@ public final class SessionManager {
     public long getStudentId() { return prefs.getLong("studentId", -1); }
     public boolean isAdmin() { return isLoggedIn() && "Admin".equals(getRole()); }
     public void logout() {
-        synchronized (SESSION_LOCK) {
-            prefs.edit().clear().apply();
-            StudentSession.clear(context);
-        }
+        prefs.edit().clear().apply();
+        StudentSession.clear(context);
     }
 
-    private void syncScheduleSession() {
+    private void syncStudentSession() {
         if ("Student".equals(getRole())) {
-            StudentSession.establish(context, getAccountId());
+            if (StudentSession.accountId(context) != getAccountId())
+                StudentSession.establish(context, getAccountId());
         } else if (StudentSession.accountId(context) > 0) {
             StudentSession.clear(context);
         }

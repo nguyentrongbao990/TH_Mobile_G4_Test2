@@ -21,7 +21,6 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
@@ -58,11 +57,8 @@ public final class ScheduleEditorDialog extends DialogFragment {
         Spinner subjects = form.findViewById(R.id.schedule_editor_subject);
         subjects.setAdapter(adapter(requireArguments().getStringArrayList("subjectNames")));
         for (int i=0; i<subjectIds.length; i++) if (subjectIds[i] == state.getLong("subjectId")) subjects.setSelection(i);
-        Spinner status = form.findViewById(R.id.schedule_editor_status);
-        List<String> labels = new ArrayList<>();
-        for (String value : ScheduleValidator.STATUSES) labels.add(ScheduleValidator.statusLabel(value) + " (" + value + ")");
-        status.setAdapter(adapter(labels));
-        status.setSelection(Math.max(0, Arrays.asList(ScheduleValidator.STATUSES).indexOf(state.getString("status"))));
+        form.findViewById(R.id.schedule_editor_status_label).setVisibility(View.GONE);
+        form.findViewById(R.id.schedule_editor_status).setVisibility(View.GONE);
         Button date = form.findViewById(R.id.schedule_editor_date);
         date.setText(state.getString("date"));
         date.setOnClickListener(v -> {
@@ -114,7 +110,9 @@ public final class ScheduleEditorDialog extends DialogFragment {
         values.putString("start", ((Button)form.findViewById(R.id.schedule_editor_start)).getText().toString());
         values.putString("end", ((Button)form.findViewById(R.id.schedule_editor_end)).getText().toString());
         values.putString("location", ((EditText)form.findViewById(R.id.schedule_editor_location)).getText().toString().trim());
-        values.putString("status", ScheduleValidator.STATUSES[((Spinner)form.findViewById(R.id.schedule_editor_status)).getSelectedItemPosition()]);
+        // Student booking creates Pending; editing booking details cannot change its status.
+        values.putString("status", requireArguments().getLong("id") == 0
+                ? ScheduleValidator.PENDING : requireArguments().getString("status"));
         return values;
     }
     static StudySchedule fromBundle(Bundle b) {

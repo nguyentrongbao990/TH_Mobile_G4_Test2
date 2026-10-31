@@ -45,7 +45,7 @@ public class ScheduleRepositoryTest {
         assertEquals("09:00",saved.getStartTime()); assertEquals("10:00",saved.getEndTime());
         saved.setLocation("Thư viện"); saved.setSubjectId(2); first.save(saved);
         assertEquals("Thư viện",first.find(id).getLocation()); assertEquals(2,first.find(id).getSubjectId());
-        first.changeStatus(id,"Confirmed"); assertEquals("Confirmed",first.find(id).getStatus());
+        first.changeStatus(id,"Cancelled"); assertEquals("Cancelled",first.find(id).getStatus());
         first.delete(id); assertTrue(first.schedules().isEmpty());
     }
     @Test public void rejectsOverlapsButAllowsAdjacentDifferentDaysAndStudents() {
@@ -96,5 +96,24 @@ public class ScheduleRepositoryTest {
     @Test public void listsInChronologicalOrder() {
         first.save(schedule(10,"15:00","16:00")); first.save(schedule(10,"08:00","09:00"));
         assertEquals("08:00",first.schedules().get(0).getStartTime());
+    }
+    @Test public void confirmedBookingCannotBeEditedEvenWithStaleStatus() {
+        long id = first.save(schedule(10,"09:00","10:00"));
+        StudySchedule stale = first.find(id);
+        first.changeStatus(id, "Confirmed");
+        stale.setLocation("Changed location");
+        stale.setSubjectId(2);
+        stale.setStartTime("11:00"); stale.setEndTime("12:00");
+        // Pending in the old form cannot override the persisted Confirmed lock.
+        assertThrows(IllegalArgumentException.class, () -> first.save(stale));
+        StudySchedule saved = first.find(id);
+        assertEquals("Confirmed", saved.getStatus());
+        assertEquals("A101", saved.getLocation()); assertEquals(1, saved.getSubjectId());
+        assertEquals("09:00", saved.getStartTime());
+        assertEquals("10:00", saved.getEndTime());
+        assertThrows(IllegalArgumentException.class, () -> first.changeStatus(id, "Pending"));
+        assertThrows(IllegalArgumentException.class, () -> first.changeStatus(id, "Cancelled"));
+        assertThrows(IllegalArgumentException.class, () -> first.delete(id));
+        assertEquals("Confirmed", first.find(id).getStatus());
     }
 }
