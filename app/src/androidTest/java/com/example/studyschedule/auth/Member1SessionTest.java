@@ -10,6 +10,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import com.example.studyschedule.data.DatabaseHelper;
 import com.example.studyschedule.model.Account;
 import com.example.studyschedule.model.Student;
+import com.example.studyschedule.schedule.StudentSession;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -53,7 +54,11 @@ public class Member1SessionTest {
     @After public void tearDown() {
         db.close();
         SQLiteDatabase.deleteDatabase(context.getDatabasePath("study_schedule.db"));
-        context.getSharedPreferences("auth_session", Context.MODE_PRIVATE).edit().clear().commit();
+        session.logout();
+        for (String name : new String[]{"auth_session", "study_schedule_student_session", "schedule_notifications"}) {
+            context.getSharedPreferences(name, Context.MODE_PRIVATE).edit().clear().commit();
+            InstrumentationRegistry.getInstrumentation().getTargetContext().deleteSharedPreferences(prefix + name);
+        }
         InstrumentationRegistry.getInstrumentation().getTargetContext()
                 .deleteSharedPreferences(prefix + "auth_session");
     }
@@ -90,6 +95,7 @@ public class Member1SessionTest {
         assertTrue(session.isLoggedIn());
         assertFalse(session.isAdmin());
         assertEquals(id, session.getStudentId());
+        assertEquals(account.getId(), StudentSession.accountId(context));
         Student linked = db.getStudentByAccountId(session.getAccountId());
         assertNotNull(linked);
         linked.setFullname("Updated Student");
@@ -97,6 +103,32 @@ public class Member1SessionTest {
         assertEquals(1, db.searchStudents("Updated").size());
         assertTrue(db.deleteStudent(id));
         assertFalse(new SessionManager(context).isLoggedIn());
+        assertEquals(-1L, StudentSession.accountId(context));
         assertNull(db.authenticate("test_student", "initial123"));
+    }
+    @Test public void scheduleBridgeRestoresSwitchesAndClears() {
+        Student first = new Student(0, "FIRST", "First Student", "", "", 0);
+        Student second = new Student(0, "SECOND", "Second Student", "", "", 0);
+        assertTrue(db.addStudent(first, "first", "password1") > 0);
+        assertTrue(db.addStudent(second, "second", "password2") > 0);
+        Account a = db.authenticate("first", "password1");
+        Account b = db.authenticate("second", "password2");
+        assertTrue(session.saveSession(a));
+        assertEquals(a.getId(), StudentSession.accountId(context));
+        StudentSession.clear(context); // Simulate an older login without the schedule bridge.
+        assertTrue(new SessionManager(context).isLoggedIn());
+        assertEquals(a.getId(), StudentSession.accountId(context));
+        assertTrue(session.saveSession(b));
+        assertEquals(b.getId(), StudentSession.accountId(context));
+        assertTrue(session.saveSession(db.authenticate("admin", "admin123")));
+        assertEquals(-1L, StudentSession.accountId(context));
+        assertTrue(session.saveSession(a));
+        session.logout();
+        assertFalse(session.isLoggedIn());
+        assertEquals(-1L, StudentSession.accountId(context));
+        // An orphaned bridge must be cleared even with no main login preferences.
+        StudentSession.establish(context, b.getId());
+        assertFalse(session.isLoggedIn());
+        assertEquals(-1L, StudentSession.accountId(context));
     }
 }

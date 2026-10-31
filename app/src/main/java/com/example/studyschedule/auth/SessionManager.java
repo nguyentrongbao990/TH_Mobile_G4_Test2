@@ -8,11 +8,13 @@ import android.database.Cursor;
 import com.example.studyschedule.data.DatabaseHelper;
 import com.example.studyschedule.model.Account;
 import com.example.studyschedule.model.Student;
+import com.example.studyschedule.schedule.StudentSession;
 
 /** Shared login state. No passwords or password hashes are saved in preferences.
  * Call requireLogin/requireAdmin in onResume of protected screens.
  */
 public final class SessionManager {
+    private static final Object SESSION_LOCK = new Object();
     private final Context context;
     private final SharedPreferences prefs;
 
@@ -23,45 +25,59 @@ public final class SessionManager {
 
     /** Call only with the Account returned by DatabaseHelper.authenticate. */
     public boolean saveSession(Account account) {
-        if (account == null || account.getId() <= 0
-                || !("Admin".equals(account.getRole()) || "Student".equals(account.getRole()))) return false;
-        long studentId = -1;
-        try (DatabaseHelper db = new DatabaseHelper(context)) {
-            try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
-                    "id=? AND username=? AND role=?", new String[]{Long.toString(account.getId()),
-                            account.getUsername(), account.getRole()}, null, null, null)) {
-                if (!c.moveToFirst()) return false;
+        synchronized (SESSION_LOCK) {
+            if (account == null || account.getId() <= 0
+                    || !("Admin".equals(account.getRole()) || "Student".equals(account.getRole()))) return false;
+            long studentId = -1;
+            try (DatabaseHelper db = new DatabaseHelper(context)) {
+                try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
+                        "id=? AND username=? AND role=?", new String[]{Long.toString(account.getId()),
+                                account.getUsername(), account.getRole()}, null, null, null)) {
+                    if (!c.moveToFirst()) return false;
+                }
+                if ("Student".equals(account.getRole())) {
+                    Student student = db.getStudentByAccountId(account.getId());
+                    if (student == null) return false;
+                    studentId = student.getId();
+                }
             }
-            if ("Student".equals(account.getRole())) {
-                Student student = db.getStudentByAccountId(account.getId());
-                if (student == null) return false;
-                studentId = student.getId();
+            boolean saved = prefs.edit().clear().putLong("accountId", account.getId())
+                    .putString("username", account.getUsername()).putString("role", account.getRole())
+                    .putLong("studentId", studentId).commit();
+            if (!saved) {
+                logout();
+                return false;
             }
+            syncScheduleSession();
+            return true;
         }
-        return prefs.edit().clear().putLong("accountId", account.getId())
-                .putString("username", account.getUsername()).putString("role", account.getRole())
-                .putLong("studentId", studentId).commit();
     }
 
     /** Rechecks persisted identity and student link; deleted accounts cannot restore a session. */
     public boolean isLoggedIn() {
-        long accountId = getAccountId();
-        String role = getRole();
-        if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) return false;
-        boolean valid;
-        try (DatabaseHelper db = new DatabaseHelper(context)) {
-            try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
-                    "id=? AND username=? AND role=?", new String[]{Long.toString(accountId),
-                            getUsername(), role}, null, null, null)) {
-                valid = c.moveToFirst();
+        synchronized (SESSION_LOCK) {
+            long accountId = getAccountId();
+            String role = getRole();
+            if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) {
+                logout();
+                return false;
             }
-            if (valid && "Student".equals(role)) {
-                Student student = db.getStudentByAccountId(accountId);
-                valid = student != null && student.getId() == getStudentId();
+            boolean valid;
+            try (DatabaseHelper db = new DatabaseHelper(context)) {
+                try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
+                        "id=? AND username=? AND role=?", new String[]{Long.toString(accountId),
+                                getUsername(), role}, null, null, null)) {
+                    valid = c.moveToFirst();
+                }
+                if (valid && "Student".equals(role)) {
+                    Student student = db.getStudentByAccountId(accountId);
+                    valid = student != null && student.getId() == getStudentId();
+                }
             }
+            if (!valid) logout();
+            else syncScheduleSession();
+            return valid;
         }
-        if (!valid) logout();
-        return valid;
     }
 
     public long getAccountId() { return prefs.getLong("accountId", -1); }
@@ -69,7 +85,20 @@ public final class SessionManager {
     public String getRole() { return prefs.getString("role", ""); }
     public long getStudentId() { return prefs.getLong("studentId", -1); }
     public boolean isAdmin() { return isLoggedIn() && "Admin".equals(getRole()); }
-    public void logout() { prefs.edit().clear().apply(); }
+    public void logout() {
+        synchronized (SESSION_LOCK) {
+            prefs.edit().clear().apply();
+            StudentSession.clear(context);
+        }
+    }
+
+    private void syncScheduleSession() {
+        if ("Student".equals(getRole())) {
+            StudentSession.establish(context, getAccountId());
+        } else if (StudentSession.accountId(context) > 0) {
+            StudentSession.clear(context);
+        }
+    }
 
     /** Clears the task as well as preferences, preventing Back from reopening protected UI. */
     public void logout(Activity activity) {

@@ -6,7 +6,7 @@
     <string name="auth_password_hint">Password</string>
     <string name="auth_login_text">Sign in</string>
     <string name="studentadmin_title_text">Student management</string>
-    <string name="studentadmin_back_text">Back to main</string>
+    <string name="studentadmin_back_text">Close</string>
     <string name="studentadmin_search_hint">Search name, code, email or phone</string>
     <string name="studentadmin_add_text">Add student</string>
     <string name="studentadmin_refresh_text">Refresh</string>

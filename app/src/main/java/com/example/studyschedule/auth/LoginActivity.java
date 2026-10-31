@@ -7,6 +7,7 @@ import android.widget.EditText;
 import android.widget.TextView;
 import com.example.studyschedule.MainActivity;
 import com.example.studyschedule.R;
+import com.example.studyschedule.studentadmin.StudentListActivity;
 import com.example.studyschedule.data.DatabaseHelper;
 import com.example.studyschedule.model.Account;
 
@@ -36,7 +37,7 @@ public class LoginActivity extends ModuleActivity {
         execute(() -> session.isLoggedIn(), valid -> {
             busy = false;
             login.setEnabled(true);
-            if (valid) openMain();
+            if (valid) openHome();
         }, e -> showError("Cannot open the database. Please try again."));
     }
 
@@ -60,7 +61,7 @@ public class LoginActivity extends ModuleActivity {
             }
         }, message -> {
             password.setText("");
-            if (message.isEmpty()) openMain(); else showError(message);
+            if (message.isEmpty()) openHome(); else showError(message);
         }, e -> showError("Unable to sign in. Please try again."));
     }
 
@@ -70,8 +71,8 @@ public class LoginActivity extends ModuleActivity {
         error.setText(message);
     }
 
-    private void openMain() {
-        startActivity(new Intent(this, MainActivity.class)
+    private void openHome() {
+        startActivity(new Intent(this, "Admin".equals(session.getRole()) ? StudentListActivity.class : MainActivity.class)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         finish();
     }
