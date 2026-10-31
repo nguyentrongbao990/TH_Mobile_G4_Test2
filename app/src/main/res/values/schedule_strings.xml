@@ -1,0 +1,19 @@
+<resources>
+    <string name="schedule_title">Lịch học của tôi</string>
+    <string name="schedule_subtitle">Chủ động thời gian, học tập hiệu quả</string>
+    <string name="schedule_new">+ Đặt lịch học</string>
+    <string name="schedule_refresh">Tải lại</string>
+    <string name="schedule_notifications">Thông báo</string>
+    <string name="schedule_search">Tìm môn, địa điểm, ngày (yyyy-MM-dd)…</string>
+    <string name="schedule_previous">Khoảng thời gian trước</string>
+    <string name="schedule_next">Khoảng thời gian sau</string>
+    <string name="schedule_today">Hôm nay</string>
+    <string name="schedule_subject">Môn học</string>
+    <string name="schedule_date">Ngày học</string>
+    <string name="schedule_start">Giờ bắt đầu</string>
+    <string name="schedule_end">Giờ kết thúc</string>
+    <string name="schedule_location">Địa điểm học</string>
+    <string name="schedule_status">Trạng thái</string>
+    <string name="schedule_filter_status">Lọc theo trạng thái</string>
+    <string name="schedule_mode">Chế độ xem lịch</string>
+</resources>
