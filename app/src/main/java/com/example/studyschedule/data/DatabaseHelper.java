@@ -223,6 +223,8 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();
         try {
+            StudySchedule current = getScheduleById(schedule.getId(), schedule.getStudentId());
+            if (current == null || "Confirmed".equals(current.getStatus())) return false;
             if (!"Cancelled".equals(schedule.getStatus()) && conflict(db, schedule.getStudentId(),
                     schedule.getStudyDate(), schedule.getStartTime(), schedule.getEndTime(),
                     schedule.getId())) return false;
@@ -240,7 +242,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public boolean deleteSchedule(long scheduleId, long studentId) {
-        return getWritableDatabase().delete("study_schedules", "id=? AND studentId=?",
+        return getWritableDatabase().delete("study_schedules", "id=? AND studentId=? AND status<>'Confirmed'",
                 args(scheduleId, studentId)) == 1;
     }
 
@@ -273,7 +275,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         db.beginTransaction();
         try {
             StudySchedule current = getScheduleById(scheduleId, studentId);
-            if (current == null) return false;
+            if (current == null || "Confirmed".equals(current.getStatus())) return false;
             if (!"Cancelled".equals(status) && conflict(db, studentId, current.getStudyDate(),
                     current.getStartTime(), current.getEndTime(), scheduleId)) return false;
             ContentValues values = new ContentValues();

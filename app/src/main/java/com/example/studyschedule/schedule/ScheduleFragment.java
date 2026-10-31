@@ -231,11 +231,21 @@ public final class ScheduleFragment extends Fragment {
     }
 
     private void editor(StudySchedule schedule) {
+        if (schedule != null && ScheduleValidator.CONFIRMED.equals(schedule.getStatus())) {
+            toast("Lịch đã được xác nhận, không thể sửa nội dung.");
+            return;
+        }
         if (busy || student == null || subjects.isEmpty() || getChildFragmentManager().findFragmentByTag(ScheduleEditorDialog.TAG) != null) return;
         ScheduleEditorDialog.create(student.getId(), subjects, schedule, selected).show(getChildFragmentManager(), ScheduleEditorDialog.TAG);
     }
     private void actions(StudySchedule schedule) {
         if (busy) return;
+        if (ScheduleValidator.CONFIRMED.equals(schedule.getStatus())) {
+            new MaterialAlertDialogBuilder(requireContext()).setTitle("Lịch đã được xác nhận")
+                    .setMessage("Bạn chỉ có thể xem lịch này; không được sửa, đổi trạng thái, hủy hoặc xóa.")
+                    .setPositiveButton("Đóng", null).show();
+            return;
+        }
         new MaterialAlertDialogBuilder(requireContext()).setTitle(subjectLabel(schedule.getSubjectId()))
                 .setItems(new String[]{"Sửa lịch", "Đổi trạng thái", "Xóa lịch"}, (dialog, which) -> {
                     if (which == 0) editor(schedule);

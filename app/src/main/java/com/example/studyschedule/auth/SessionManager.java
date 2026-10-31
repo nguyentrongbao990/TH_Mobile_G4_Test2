@@ -8,6 +8,7 @@ import android.database.Cursor;
 import com.example.studyschedule.data.DatabaseHelper;
 import com.example.studyschedule.model.Account;
 import com.example.studyschedule.model.Student;
+import com.example.studyschedule.schedule.StudentSession;
 
 /** Shared login state. No passwords or password hashes are saved in preferences.
  * Call requireLogin/requireAdmin in onResume of protected screens.
@@ -38,16 +39,22 @@ public final class SessionManager {
                 studentId = student.getId();
             }
         }
-        return prefs.edit().clear().putLong("accountId", account.getId())
+        boolean saved = prefs.edit().clear().putLong("accountId", account.getId())
                 .putString("username", account.getUsername()).putString("role", account.getRole())
                 .putLong("studentId", studentId).commit();
+        if (!saved) { logout(); return false; }
+        syncStudentSession();
+        return true;
     }
 
     /** Rechecks persisted identity and student link; deleted accounts cannot restore a session. */
     public boolean isLoggedIn() {
         long accountId = getAccountId();
         String role = getRole();
-        if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) return false;
+        if (accountId <= 0 || !("Admin".equals(role) || "Student".equals(role))) {
+            logout();
+            return false;
+        }
         boolean valid;
         try (DatabaseHelper db = new DatabaseHelper(context)) {
             try (Cursor c = db.getReadableDatabase().query("accounts", new String[]{"id"},
@@ -61,6 +68,7 @@ public final class SessionManager {
             }
         }
         if (!valid) logout();
+        else syncStudentSession();
         return valid;
     }
 
@@ -69,7 +77,19 @@ public final class SessionManager {
     public String getRole() { return prefs.getString("role", ""); }
     public long getStudentId() { return prefs.getLong("studentId", -1); }
     public boolean isAdmin() { return isLoggedIn() && "Admin".equals(getRole()); }
-    public void logout() { prefs.edit().clear().apply(); }
+    public void logout() {
+        prefs.edit().clear().apply();
+        StudentSession.clear(context);
+    }
+
+    private void syncStudentSession() {
+        if ("Student".equals(getRole())) {
+            if (StudentSession.accountId(context) != getAccountId())
+                StudentSession.establish(context, getAccountId());
+        } else if (StudentSession.accountId(context) > 0) {
+            StudentSession.clear(context);
+        }
+    }
 
     /** Clears the task as well as preferences, preventing Back from reopening protected UI. */
     public void logout(Activity activity) {

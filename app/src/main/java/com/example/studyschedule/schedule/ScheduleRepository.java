@@ -83,8 +83,13 @@ public final class ScheduleRepository implements AutoCloseable {
             if (schedule.getStudentId() != studentId) throw new IllegalArgumentException("Bạn chỉ được sửa lịch của mình.");
             ScheduleValidator.validate(schedule);
             if (schedule.getId() < 0) throw new IllegalArgumentException("Mã lịch không hợp lệ.");
-            if (schedule.getId() > 0 && findOwned(schedule.getId(), studentId) == null)
-                throw new IllegalArgumentException("Lịch không tồn tại hoặc không thuộc về bạn.");
+            if (schedule.getId() > 0) {
+                StudySchedule current = findOwned(schedule.getId(), studentId);
+                if (current == null)
+                    throw new IllegalArgumentException("Lịch không tồn tại hoặc không thuộc về bạn.");
+                if (ScheduleValidator.CONFIRMED.equals(current.getStatus()))
+                    throw new IllegalArgumentException("Lịch đã được xác nhận, không thể sửa nội dung.");
+            }
             try (Cursor c = db.query("subjects", new String[]{"id"}, "id=?", args(schedule.getSubjectId()), null, null, null)) {
                 if (!c.moveToFirst()) throw new IllegalArgumentException("Môn học không còn tồn tại.");
             }
@@ -121,8 +126,8 @@ public final class ScheduleRepository implements AutoCloseable {
     }
 
     public void delete(long id) {
-        if (db.delete("study_schedules", "id=? AND studentId=?", args(id, requireStudent())) != 1)
-            throw new IllegalArgumentException("Lịch không tồn tại hoặc không thuộc về bạn.");
+        if (db.delete("study_schedules", "id=? AND studentId=? AND status<>'Confirmed'", args(id, requireStudent())) != 1)
+            throw new IllegalArgumentException("Không thể xóa: lịch đã xác nhận, không tồn tại hoặc không thuộc về bạn.");
     }
 
     private static ContentValues values(StudySchedule s) {
