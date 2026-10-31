@@ -19,47 +19,43 @@ Quyền sở hữu `schedule/` trong AGENTS.md/PROJECT_CONTRACT.md hiện còn t
 - Nhắc khoảng 15 phút trước buổi học; cập nhật/hủy alarm khi sửa/xóa/hủy; thông báo thay đổi.
 - Nhắc dùng AlarmManager inexact: hệ thống có thể giao trễ. Không yêu cầu quyền exact alarm.
 
-## TV1: nối phiên sau đăng nhập
+## Tích hợp phiên đăng nhập
 
-TV3 không tạo tài khoản demo hoặc đăng nhập giả. Commit TV1 `73a444a` đã triển khai
-API database và seed Admin `admin` / `admin123` khi tạo database mới. MainActivity vẫn
-hiển thị trạng thái chưa đăng nhập cho đến khi TV1 cung cấp phiên Student hợp lệ.
+Đã pull TV1 `1951660`. `LoginActivity` xác thực rồi dùng `SessionManager.saveSession`;
+SessionManager tự đồng bộ cầu nối StudentSession khi đăng nhập/khôi phục phiên. TV3
+không cần tự ghi SharedPreferences của TV1 hoặc gọi establish lần nữa.
 
-Sau khi **xác thực thành công** tài khoản có role chính xác `Student`:
+MainActivity kiểm tra `session.requireLogin(this)` trong mỗi `onResume`, bao gồm mở từ
+thông báo, trở lại từ nền và sau xoay màn hình. Phiên không hợp lệ về LoginActivity;
+Admin vào MainActivity được chuyển tới StudentListActivity và đóng màn hình Student.
+Nội dung Student bị ẩn cho đến khi kiểm tra phiên thành công. Nếu đọc database lỗi,
+màn hình cho phép thử lại hoặc đăng xuất thay vì hiện dữ liệu phiên cũ.
 
-```java
-StudentSession.establish(context, account.getId());
-startActivity(new Intent(context, MainActivity.class));
-```
+Nút **Đăng xuất** trong activity_main.xml gọi `session.logout(this)`. API TV1 xóa cả
+auth_session và StudentSession, hủy alarm/thông báo, xóa task cũ và mở LoginActivity;
+Back không trở lại được màn hình Student. Nếu một Student khác đăng nhập khi activity
+cũ còn tồn tại, host tạo lại fragment theo accountId để không dùng lại form/dữ liệu cũ.
+Cùng một tài khoản vẫn giữ fragment khi xoay màn hình.
 
-Khi đăng xuất hoặc chuyển sang Admin:
-
-```java
-StudentSession.clear(context); // Xóa phiên và hủy alarm của sinh viên.
-```
-
-Import `com.example.studyschedule.schedule.StudentSession`. Cầu nối này dùng SharedPreferences
-riêng `study_schedule_student_session`, key `accountId` (long). Không lưu mật khẩu.
-Repository luôn kiểm tra tài khoản còn tồn tại, role `Student`, hồ sơ students khớp accountId.
-Không dùng accountId thay studentId, không nhận studentId từ Intent bên ngoài.
-TV1 phải giữ cầu nối đồng bộ với phiên đăng nhập chính, bao gồm khi phiên hết hạn.
-MainActivity hiện là màn hình Student; TV1 điều hướng Admin tới dashboard riêng.
+StudentSession dùng SharedPreferences riêng `study_schedule_student_session`, key
+`accountId` (long). Repository kiểm tra role `Student` và hồ sơ students khớp accountId;
+không dùng accountId thay studentId hoặc nhận studentId từ Intent bên ngoài.
 TV2 cung cấp subjects trong cùng SQLite database; chưa có môn thì nút tạo lịch bị khóa.
 
-## TV1: ghép cấu hình thông báo vào AndroidManifest.xml
+## Cấu hình thông báo (TV1 đã ghép)
 
-Theo quy định repository, TV3 không sửa manifest/Gradle của TV1. Không cần thư viện mới.
-**Thông báo nền chưa hoạt động cho đến khi TV1 ghép cấu hình sau.** UI có thông báo rõ
-và không yêu cầu quyền khi receiver chưa được khai báo.
+Theo quy định repository, TV3 không sửa manifest/Gradle của TV1. Commit `1951660` đã
+khai báo quyền và receiver bên dưới; không thêm lần nữa. UI vẫn kiểm tra cấu hình
+và quyền runtime trước khi hẹn nhắc. Không cần thư viện mới.
 
-Thêm trực tiếp dưới `<manifest>`:
+Các quyền dưới `<manifest>`:
 
 ```xml
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 ```
 
-Thêm bên trong `<application>`:
+Các receiver bên trong `<application>`:
 
 ```xml
 <receiver android:name=".notification.ScheduleReminderReceiver" android:exported="false" />
@@ -109,4 +105,9 @@ trong 15 phút tới để nhận nhắc sớm, rồi sửa/hủy để kiểm t
 - 8 test SQLite đã biên dịch thành APK test; chưa chạy trên thiết bị (không có thiết bị kết nối,
   yêu cầu mở emulator không được chấp thuận).
 - XML của module parse thành công; `git diff --check` không báo lỗi whitespace.
-- Chưa kiểm thử giao diện/notification trên emulator; cấu hình manifest và đăng nhập vẫn cần TV1 tích hợp.
+- Cập nhật sau pull `1951660`: TV1 đã nối phiên và manifest; TV3 đã bổ sung guard onResume,
+  điều hướng Admin và nút Student logout. Lượt build cho thay đổi mới này chưa chạy vì
+  yêu cầu quyền thực thi không được chấp thuận. Các kết quả build ở trên thuộc bản trước.
+- Cần kiểm tra thiết bị cho thay đổi mới: đăng nhập Student → về nền → xóa/hết phiên → mở lại;
+  logout → Back; mở MainActivity với phiên Admin; xoay màn hình giữ bản nháp; chuyển hai Student.
+- Chưa kiểm thử thủ công giao diện/notification và nút logout mới trên emulator.

@@ -16,4 +16,8 @@
     <string name="schedule_status">Trạng thái</string>
     <string name="schedule_filter_status">Lọc theo trạng thái</string>
     <string name="schedule_mode">Chế độ xem lịch</string>
+    <string name="schedule_logout">Đăng xuất</string>
+    <string name="schedule_retry">Thử lại</string>
+    <string name="schedule_session_error_title">Chưa kiểm tra được phiên đăng nhập</string>
+    <string name="schedule_session_error_message">Không thể đọc dữ liệu tài khoản. Vui lòng thử lại hoặc đăng xuất.</string>
 </resources>
