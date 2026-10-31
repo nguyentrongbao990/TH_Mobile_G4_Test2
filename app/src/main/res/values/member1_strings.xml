@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_title_text">Study Schedule</string>
+    <string name="auth_subtitle_text">Sign in to your Admin or Student account.</string>
+    <string name="auth_username_hint">Username</string>
+    <string name="auth_password_hint">Password</string>
+    <string name="auth_login_text">Sign in</string>
+    <string name="studentadmin_title_text">Student management</string>
+    <string name="studentadmin_back_text">Back to main</string>
+    <string name="studentadmin_search_hint">Search name, code, email or phone</string>
+    <string name="studentadmin_add_text">Add student</string>
+    <string name="studentadmin_refresh_text">Refresh</string>
+    <string name="studentadmin_logout_text">Log out</string>
+    <string name="studentadmin_form_title_text">Add student</string>
+    <string name="studentadmin_form_note_text">Student code, full name, username and initial password are required. Email and phone are optional.</string>
+    <string name="studentadmin_code_hint">Student code</string>
+    <string name="studentadmin_name_hint">Full name</string>
+    <string name="studentadmin_email_hint">Email (optional)</string>
+    <string name="studentadmin_phone_hint">Phone (optional)</string>
+    <string name="studentadmin_username_hint">Username</string>
+    <string name="studentadmin_password_hint">Initial password</string>
+    <string name="studentadmin_save_text">Save student</string>
+    <string name="studentadmin_cancel_text">Cancel</string>
+</resources>

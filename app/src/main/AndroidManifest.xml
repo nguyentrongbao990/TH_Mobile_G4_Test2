@@ -12,7 +12,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.StudyScheduleApp">
         <activity
-            android:name=".MainActivity"
+            android:name=".auth.LoginActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -21,6 +21,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".MainActivity" android:exported="false" />
+        <activity android:name=".studentadmin.StudentListActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".studentadmin.StudentFormActivity" android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 
 </manifest>
