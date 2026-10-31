@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginBottom="12dp" android:clickable="true" android:focusable="true" android:foreground="?attr/selectableItemBackground">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:padding="16dp" android:orientation="vertical">
+        <TextView android:id="@+id/schedule_row_subject" android:layout_width="match_parent" android:layout_height="wrap_content" android:textSize="18sp" android:textStyle="bold" />
+        <TextView android:id="@+id/schedule_row_time" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp" />
+        <TextView android:id="@+id/schedule_row_location" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="4dp" />
+        <TextView android:id="@+id/schedule_row_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp" android:textStyle="bold" />
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
